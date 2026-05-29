@@ -513,10 +513,7 @@ function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1,
     stepsize  = abs(rf- r0)
 
 
-    # ── Sobrepico (overshoot) — solo post-escalón ─────────────────────
-    peak, pidx = findmax(y) 
-    peaktime   = t[pidx] 
-    overshoot  = 100.0 * (peak - yf) / stepsize
+
 
     # ── Subpico (undershoot) — solo post-escalón ──────────────────────
     lowerpeak, _ =  findmin(y) 
@@ -527,17 +524,22 @@ function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1,
     #  El filtro ve primero el estado estacionario; el primer índice
     #  donde la salida se sale de la banda marca el settling time.
     
-    responsetype = Lowpass(12)
-    designmethod = FIRWindow(hanning(32))
+    responsetype = Lowpass(15)
+    designmethod = FIRWindow(hanning(8))
     
    
     settle_filt    = digitalfilter(responsetype, designmethod; fs=fs)
-    y_filtered = filtfilt(settle_filt, y)
+    y_filtered =  filtfilt(settle_filt, y)
     band           = settling_th * stepsize
     
     idx_rev        = findfirst(abs.(reverse(y_filtered) .- yf) .> band)
     t_rev    = reverse(t)
      
+
+        # ── Sobrepico (overshoot) — solo post-escalón ─────────────────────
+    peak, pidx = findmax(y_filtered) 
+    peaktime   = t[pidx] 
+    overshoot  = 100.0 * (peak - yf) / stepsize
 
     if idx_rev === nothing
         settlingtime = NaN
@@ -564,7 +566,7 @@ function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1,
     else
         t10      = _interp_cross(t, y_filtered, lv10, i10)
         t90      = _interp_cross(t, y_filtered, lv90, i90)
-        risetime = t90 - t10
+        risetime = t90- t10
     end
 
     info = StepInfoSR(y0, yf, stepsize, peak, peaktime, overshoot,
@@ -602,7 +604,7 @@ function _plot_stepinfo(t, r, y, t10, t90, i10, i90,  si, T)
         lw     = 2, color = :navy, alpha = 1,
         xlabel = "Tiempo (s)", ylabel = "Amplitud",
         title  = "Respuesta experimental al Escalón",
-        legend = :right, size = (900, 500),        
+        legend = :right, size = (900, 500),     
         )
 
     
