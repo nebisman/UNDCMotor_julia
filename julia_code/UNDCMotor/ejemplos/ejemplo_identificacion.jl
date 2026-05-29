@@ -23,8 +23,7 @@ sys = MotorSystemIoT(
 )
 
 # ── 2. Curva estática ───────────────────────────────────────────────
-# NOTA: Este experimento tarda varios minutos.
-# Barre todos los voltajes y mide la velocidad estacionaria.
+## Barre todos los voltajes y mide la velocidad estacionaria.
 uee, yee = get_static_model(sys; points=30)
 println("Curva estática: $(length(uee)) puntos")
 
@@ -34,7 +33,7 @@ println("Step open: $(length(t)) muestras")
 
 # ── 4. Modelo FOTD desde escalón ────────────────────────────────────
 # Estima alpha, tau, L del modelo G(s) = alpha/(tau·s + 1) · exp(-L·s)
-alpha, tau, L = get_fomodel_step(sys; yop=400)
+G, L = get_fomodel_step(sys; yop=400)
 println("Modelo FOTD: α=$(round(alpha,digits=3)), τ=$(round(tau,digits=3)), L=$(round(L,digits=3))")
 
 # ── 5. Modelo de primer orden desde PRBS ────────────────────────────
