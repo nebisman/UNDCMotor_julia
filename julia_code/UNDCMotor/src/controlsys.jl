@@ -613,7 +613,7 @@ function _plot_stepinfo(t, r, y, t10, t90, i10, i90,  si, T)
     end      
     plot!(t, y;
         label  = "y(t) medida (yf = $(@sprintf("%.2f",si.yf)))",
-        lw     = 2, color = :navy, alpha = 1,
+        lw     = 2, color = "#ff2a7f", alpha = 1,
         xlabel = "Tiempo (s)", ylabel = "Amplitud",
         title  = "Respuesta experimental al Escalón",
         legend = :right, size = (900, 500),     

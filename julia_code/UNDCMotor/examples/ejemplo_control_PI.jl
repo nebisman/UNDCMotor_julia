@@ -10,7 +10,7 @@ include("ControlUN.jl")
 
 
 # definicion del sistema
-sys = MotorSystem(port="/dev/ttyUSB0");
+sist = MotorSystem(port="/dev/ttyUSB0", bauds=460800);
 
 s=tf("s")
 
@@ -40,7 +40,7 @@ tr = 0.2
 # iteraciones
 ωn=12
 ζ = 0.7
-T  = ωn^2/(s^2 + 2*ζ0*ωn*s +ωn^2)
+T  = ωn^2/(s^2 + 2*ζ*ωn*s +ωn^2)
 
 # calculo de las constantes
 Kp = (2*ζ*ωn-a)/b
@@ -48,7 +48,7 @@ Ki = ωn^2/b
 
 
 # exoerimentos
-set_pid(sys;  kp=Kp, ki=Ki, kd=0, beta=0, output=:speed, deadzone=0)
+set_pid(sys;  kp=Kp, ki=Ki, kd=0, beta=1, output=:speed, deadzone=0)
 
 result = step_closed(sys; r0 = 0, r1 = 360,  t0 = 1, t1 =3); stepinfo_exp(result;T)
 #stairs_closed(sys, stairs=[180, 270, 360, 450,540,620] )
