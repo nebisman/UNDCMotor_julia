@@ -1,12 +1,12 @@
 // Definitions for the DC motor system
-// Created by LB on 1/18/24.
+// Created by LB on 20/05/026 MIT LICENSE.
 #include <stdlib.h>
 #include <ESP32Encoder.h>
 #include <ArduinoJson.h>
 #include <Adafruit_NeoPixel.h>
 
 
-#define  PLANT_NUMBER  ""     
+
 
 //#define DEBUG 0   // Set to 1 to enable debug prints, set to 0 to disable them
 
@@ -55,14 +55,14 @@
 
 
 // Topics received from the user
-#define USER_SYS_SET_PID            PLANT_NUMBER "/set_pid"
-#define USER_SYS_SET_REF            PLANT_NUMBER "/set_ref"
-#define USER_SYS_STEP_CLOSED        PLANT_NUMBER "/step_closed"
-#define USER_SYS_STAIRS_CLOSED      PLANT_NUMBER "/stairs_closed"
-#define USER_SYS_PRBS_OPEN          PLANT_NUMBER "/prbs_open"
-#define USER_SYS_STEP_OPEN          PLANT_NUMBER "/step_open"
-#define USER_SYS_SET_GENCON         PLANT_NUMBER "/set_gencon"
-#define USER_SYS_PROFILE_CLOSED     PLANT_NUMBER "/prof_closed"
+#define USER_SYS_SET_PID             "/set_pid"
+#define USER_SYS_SET_REF             "/set_ref"
+#define USER_SYS_STEP_CLOSED         "/step_closed"
+#define USER_SYS_STAIRS_CLOSED       "/stairs_closed"
+#define USER_SYS_PRBS_OPEN           "/prbs_open"
+#define USER_SYS_STEP_OPEN           "/step_open"
+#define USER_SYS_SET_GENCON          "/set_gencon"
+#define USER_SYS_PROFILE_CLOSED      "/prof_closed"
 
 /** Integer definitions of topics to avoid comparison with strings, which is more expensive
     in terms of computation */
@@ -584,10 +584,11 @@ void  onCommandReceived(char* lastTopic, byte* lastPayload) {
         #ifdef DEBUG
         printf("Stairs signal of %d steps  with a duration of %0.2f secs.\n", points_stairs, h * total_time);
         #endif  
-             
+        reset_int = true;    
+        resumeControl(); 
         vTaskResume(h_publishStateTask);
-        reset_int = true;
-        resumeControl();
+        
+        
     }
 
     else if(strstr(lastTopic, USER_SYS_PRBS_OPEN )) {
@@ -653,9 +654,9 @@ void  onCommandReceived(char* lastTopic, byte* lastPayload) {
             printf("]\n");
         #endif
 
+        reset_int = true;    
+        resumeControl(); 
         vTaskResume(h_publishStateTask);
-        reset_int = true;
-        resumeControl();
     }
 }
 
@@ -802,6 +803,10 @@ float compDeadZone(float var, float dz){
 }
 
 void setup_peripherals(void){
+    // Setting serial port for receiving commands from the user through USB
+    Serial.begin(BAUDRATE);
+    Serial.onReceive(onSerialReceive);
+
     //setting the pwm channels
     
     ledcAttach(PIN_AIN1, FREQUENCY_PWM, RESOLUTION_PWM);
@@ -831,9 +836,7 @@ void setup_peripherals(void){
     dispLed.show();
     dispLed.setBrightness(30);
 
-    // Setting serial port for receiving commands from the user through USB
-    Serial.begin(BAUDRATE);
-     Serial.onReceive(onSerialReceive);
+
 
     // Create the task for receiving commands through USB 
 

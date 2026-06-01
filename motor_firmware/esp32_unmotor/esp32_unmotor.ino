@@ -548,7 +548,7 @@ static void buttonTask(void *pvParameters) {
        if (touchRead(BUTTON_LIFEFLOWER) > threshold){  
    
             // decrementamos  la referencia en 90°           
-            reference -= 180;
+            reference -= 90;
             vTaskDelay(1000);   
             }
        //   
@@ -570,12 +570,11 @@ void setup() {
             "User command IOT",
             8192,
             NULL,
-            10,
+            22,
             &h_publishStateTask,
             CORE_COMM
     );
-    vTaskSuspend(h_publishStateTask);
-
+    
     vTaskDelay(100);
     // This is a task for the minimal UI of the board
     xTaskCreatePinnedToCore(
@@ -588,7 +587,7 @@ void setup() {
         CORE_CONTROL // la vamos a ejecutar en el CORE_0 que es comparte tareas con el procesador, baja prioridad
     );
 
-     vTaskSuspend(h_buttonTask);
+    // vTaskSuspend(h_buttonTask);
 
 
     // Creating the task for PID control in core 0.
@@ -601,6 +600,7 @@ void setup() {
             &h_controlPidTask,
             CORE_CONTROL
     );
+
     // Creating the task for speed PID control in core 0.
     xTaskCreatePinnedToCore(
             speedControlPidTask, // This is the control routine
@@ -613,24 +613,14 @@ void setup() {
     );
     vTaskSuspend(h_speedControlPidTask);
 
-    
-    // xTaskCreatePinnedToCore(
-    //         handleConnections, // This is communication task
-    //         "handle connections",
-    //         4096,
-    //         nullptr,
-    //         10,
-    //         nullptr,
-    //         CORE_COMM // communications are attached to core 1
-    // );
 
     // Task that receives commands from Serial instead of MQTT
     xTaskCreatePinnedToCore(
             serialCommandTask,
             "serial command",
-            4096,
+            8192,
             nullptr,
-            15,
+            23,
             &h_serialCommandTask,
             CORE_COMM
     );
