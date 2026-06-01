@@ -26,9 +26,7 @@ deps = [
     "Interpolations",   # Interpolación para curva estática
     "DelimitedFiles",   # Lectura/escritura de CSV simples
     "ControlSystems",   # Funciones de transferencia, espacio de estados
-    "ControlSystemsBase", #    
-    "MatrixEquations",  # Ecuación de Riccati (DARE) para anti-windup
-    "Optim",            # Optimización (reemplazo de scipy.optimize)
+    "ControlSystemsBase", # funciones de estado
     "Plots",            # Gráficas en tiempo real
     "Statistics",       # mean, std (stdlib)
     "Printf",          # @sprintf, @printf (stdlib)

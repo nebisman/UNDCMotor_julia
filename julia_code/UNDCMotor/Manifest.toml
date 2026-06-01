@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.12.5"
+julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "4f3af717d5c68ed077e17d68f40a62e0a3112837"
+project_hash = "73c30819ee9e8789afcefc9ac15e72db1bba9bdb"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "bbc22a9a08a0ef6460041086d8a7b27940ed4ffd"
@@ -2729,7 +2729,7 @@ uuid = "781d530d-4396-4725-bb49-402e4bee1e77"
 version = "1.4.0"
 
 [[deps.UNDCMotor]]
-deps = ["Alert", "CSV", "ControlSystemIdentification", "ControlSystems", "DSP", "DataFrames", "DelimitedFiles", "FastRunningMedian", "Interpolations", "InvertedIndices", "JSON3", "Latexify", "LibSerialPort", "LinearAlgebra", "MatrixEquations", "Optim", "Plots", "Polynomials", "Printf", "Revise", "RobustAndOptimalControl", "Statistics", "Symbolics"]
+deps = ["Alert", "CSV", "ControlSystemIdentification", "ControlSystems", "ControlSystemsBase", "DSP", "DataFrames", "DelimitedFiles", "FastRunningMedian", "Interpolations", "InvertedIndices", "JSON3", "Latexify", "LibSerialPort", "LinearAlgebra", "MatrixEquations", "Optim", "Plots", "Polynomials", "Printf", "Revise", "RobustAndOptimalControl", "Statistics", "Symbolics"]
 path = "."
 uuid = "e7a9ab87-c617-45b1-8476-4469afc7ea26"
 version = "1.0.0"

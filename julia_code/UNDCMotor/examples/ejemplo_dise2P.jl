@@ -12,17 +12,16 @@ include("ControlUN.jl")
 # definicin del sistema
 sys = MotorSystem(port="/dev/ttyUSB0");
 
-#identificacion del sistema
-G = get_model_prbs(sys; yop=150)
-#G, L = get_fomodel_step(sys; yop=150) # ussando PRBS
+#funcion de transferencia
+G_ang = transfer_function(sys)
+
 
 # funcion de angulo
-s = tf("s")
-G_ang = G/s
 
+s=tf("s")
 
 # funcion itae
-w0 = 11
+w0 = 12
 T = (w0^3)/(s^3 + 1.75*s^2*w0 + 2.15*s*w0^2 + w0^3)
 
 #Diseño y carga del controlador 
@@ -31,5 +30,5 @@ set_controller(sys, C2; output=:angle, deadzone=0.4);
 
 
 # respuesta del controlador
-result = step_closed(sys; r0 = 0, r1 = 80,  t0 = 1, t1 =3);
-stepinfo_exp(result;T)
+result = step_closed(sys; r0 = 0, r1 = 80,  t0 = 1, t1 =2); stepinfo_exp(result;T)
+profile_closed(sys; timevalues =[0,2,4,6,8], refvalues=[0,90,180,90, 0])

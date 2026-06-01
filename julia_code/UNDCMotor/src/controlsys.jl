@@ -92,10 +92,10 @@ function set_pid(sys::MotorSystem;
     connect!(sys)
     send_command!(sys, "set_pid", payload)
     sleep(0.1)
-    set_reference(sys, 0); 
-    sleep(0.1)
+    set_reference(sys, 0);    
     disconnect!(sys)
-    println("Parámetros PID actualizados")
+    sleep(0.25)
+    println("PID actualizado: kp=$kp  ki=$ki  kd=$kd  N=$N  β=$beta")
     return nothing
 end
 
@@ -483,40 +483,40 @@ Detecta automáticamente el instante del escalón y mide tiempos desde allí.
 """
 function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1, 0.9))
     
-    t = res[1] 
-    r = res[2]
-    y = res[3]
-    u = res[4]
+    t1 = res[1] 
+    r1 = res[2]
+    y1 = res[3]
+    u1 = res[4]
 
-    u_max = maximum(abs.(u))
+    u_max = maximum(abs.(u1))
 
-    n  = length(y)
-    Ts = t[2] - t[1]
+    n  = length(y1)
+    Ts = SAMPLING_TIME
     fs = 1.0 / Ts
 
     # ── Detectar instante del escalón en u ────────────────────────────
-    step_idx = argmax(abs.(diff(r)))
-    t_step   = t[step_idx]
-    t= t.-t_step
+    step_idx = argmax(abs.(diff(r1))) 
+    t_step   = t1[step_idx]
+    #t = t.-t_step
     # ── Valores de estado estacionario ────────────────────────────────
     #  y0: promedio de hasta 50 puntos ANTES del escalón
     #  yf: promedio de los últimos 50 puntos
     n_pre = min(step_idx, 50)
-    y0    = mean(y[step_idx - n_pre + 1 : step_idx])
+    y0    = mean(y1[step_idx - n_pre + 1 : step_idx])
     n_end = min(50, n)
-    yf    = mean(y[n - n_end + 1 : n])
+    yf    = mean(y1[n - n_end + 1 : n])
 
     # ── Dirección y magnitud (desde u) ────────────────────────────────
     
-    rf = r[end]
-    r0 = r[1]
+    rf = r1[end]
+    r0 = r1[1]
     stepsize  = abs(rf- r0)
 
 
 
 
     # ── Subpico (undershoot) — solo post-escalón ──────────────────────
-    lowerpeak, _ =  findmin(y) 
+    lowerpeak, _ =  findmin(y1) 
     undershoot   = max(100.0 * (y0 - lowerpeak) / stepsize, 0.0)
 
     # ── Tiempo de estabilización ──────────────────────────────────────
@@ -529,23 +529,30 @@ function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1,
     
    
     settle_filt    = digitalfilter(responsetype, designmethod; fs=fs)
-    y_filtered =  filtfilt(settle_filt, y)
-    band           = settling_th * stepsize
+    y_filtered =  filtfilt(settle_filt, y1)
     
-    idx_rev        = findfirst(abs.(reverse(y_filtered) .- yf) .> band)
+    y = y_filtered[step_idx: end]
+    y[1] = y0 # corregir posible distorsión inicial del filtro
+    t = t1[step_idx: end] .- t_step
+    r = r1[step_idx: end]
+
+    band           = settling_th * stepsize
+    idx_rev        = findfirst(abs.(reverse(y) .- yf) .> band)
     t_rev    = reverse(t)
      
-
-        # ── Sobrepico (overshoot) — solo post-escalón ─────────────────────
-    peak, pidx = findmax(y_filtered) 
-    peaktime   = t[pidx] 
-    overshoot  = 100.0 * (peak - yf) / stepsize
-
     if idx_rev === nothing
         settlingtime = NaN
     else
         settlingtime = t_rev[idx_rev] 
     end
+
+
+
+       # ── Sobrepico (overshoot) — solo post-escalón ─────────────────────
+    peak, pidx = findmax(y) 
+    peaktime   = t[pidx] 
+    overshoot  = 100.0 * (peak - yf) / stepsize
+
  
 
     # ── Tiempo de subida — interpolación suave post-escalón ───────────
@@ -557,15 +564,15 @@ function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1,
 
     lv10 = y0 + risetime_th[1] * stepsize 
     lv90 = y0 + risetime_th[2] * stepsize 
-    op   =  (>)
-    i10  = findfirst(op.(y_filtered, lv10))
-    i90  = findfirst(op.(y_filtered, lv90))
+    
+    i10  = findfirst(y .> lv10)
+    i90  = findfirst(y .> lv90)
 
     if i10 === nothing || i90 === nothing
         risetime = NaN
     else
-        t10      = _interp_cross(t, y_filtered, lv10, i10)
-        t90      = _interp_cross(t, y_filtered, lv90, i90)
+        t10      = _interp_cross(t, y, lv10, i10)
+        t90      = _interp_cross(t, y, lv90, i90)
         risetime = t90- t10
     end
 
@@ -573,7 +580,7 @@ function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1,
                       lowerpeak, undershoot, settlingtime, risetime,
                       settling_th, risetime_th,  u_max)
 
-    _plot_stepinfo(t, r, y_filtered, t10, t90,i10, i90,  info, T)
+    _plot_stepinfo(t, r, y, t10, t90,i10, i90,  info, T)
     return info
 end
 
@@ -589,7 +596,12 @@ function _plot_stepinfo(t, r, y, t10, t90, i10, i90,  si, T)
     
 
     p =    plot( t, r;
-        label = "r(t)", lw = 1.5, color = :green, alpha=0.7, background_color=:mintcream)
+        label = "r(t)", lw = 1.5, color = :green, 
+        alpha=0.7, background_color=:mintcream, seriestype=:steppre)
+    # plot!( [0,0],[si.y0, si.y0 + si.stepsize];
+    #     label = "r(t)", lw = 1.5, color = :green, alpha=0.7, background_color=:mintcream)
+
+        
 
     if  T !== nothing
         t1 = 0: 1/1000: t[end]

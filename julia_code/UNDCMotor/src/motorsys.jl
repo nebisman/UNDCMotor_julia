@@ -320,24 +320,18 @@ end
 Retorna la función de transferencia nominal del motor DC.
 `output` puede ser `:position` o `:speed`.
 """
-function transfer_function(sys::MotorSystem;
-                           output::Symbol = :position, min_order::Bool = true)
-    if output == :position
-        if min_order
-            num = [4369.0278678492]
-            den = [1.0, 9.97077548888435, 0.0]
-        else
-            num = [798289.164111307]
-            den = [1.0, 187.699939287416, 1803.62183871806, 0.0]
-        end
-    else  # :speed
-        if min_order
-            num = [4369.0278678492]
-            den = [1.0, 9.97077548888435]
-        else
-            num = [798289.164111307]
-            den = [1.0, 187.699939287416, 1803.62183871806]
-        end
+function transfer_function(sys::MotorSystem,
+                           output::Symbol = :angle)
+    if output == :angle   # angle   
+            num = [3479.0413]
+            den = [1.0000, 2.4825, 0]
+ 
+            
+
+    else # :speed at 360
+            num = [2300.5004]
+            den = [1.0, 3.3203]
+       
     end
     return ControlSystems.tf(num, den)
 end
