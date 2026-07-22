@@ -432,7 +432,7 @@ const TickType_t taskPeriod = (uint32_t) (1000 * h);
         TickType_t xLastWakeTime = xTaskGetTickCount();
 
         if (reset_int){
-            displayLed(0l , -1, 1, 0, 0);
+            displayLed(u , -1, 1, 0, 0);
             float val = (low_val + high_val)/2;
             voltsToMotor(val);         
             vTaskDelay(2000);
