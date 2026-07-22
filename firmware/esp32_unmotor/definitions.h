@@ -336,21 +336,24 @@ void voltsToMotor( float volts){
     // This function convert a voltage value given in variable volts
     // to a bipolar pwm signal for controlling the motor
 
-    unsigned int pwm = abs(volts)*percent2pwm;
+    unsigned int pwm = 4095- abs(volts)*percent2pwm;
 
     if (volts < 0){
         // if var volts is negative use CH_PWM_AIN2 to output a pwm signal
         // proportional to the input voltage
-        ledcWrite(PIN_AIN1, 0);
-        ledcWrite(PIN_AIN2, pwm);
+        ledcWrite(PIN_AIN1, pwm);
+        //digitalWrite(PIN_AIN2, HIGH);
+        ledcWrite(PIN_AIN2, 4095);
     }
     else{
         // if var volts is negative use CH_PWM_AIN1 to output a pwm signal
         // proportional to the input voltage
-        ledcWrite(PIN_AIN1, pwm);
-        ledcWrite(PIN_AIN2, 0);
+        ledcWrite(PIN_AIN1, 4095);
+        //digitalWrite(PIN_AIN1, HIGH);
+        ledcWrite(PIN_AIN2, pwm);
     }
 }
+
 
 
 void sensorToColormap(float x, uint8_t * rgbval) {
@@ -480,8 +483,7 @@ void  onCommandReceived(char* lastTopic, byte* lastPayload) {
         kd = hex2Float((const char *) doc["kd"]);
         N = hex2Float((const char *) doc["N"]);
         beta = hex2Float((const char *) doc["beta"]);
-        typeControl = hex2Long((const char *) doc["typeControl"]);
-        beta = hex2Float((const char *) doc["beta"]);
+        typeControl = hex2Long((const char *) doc["typeControl"]);     
         deadzone =  hex2Float((const char *) doc["deadzone"]);
 
         #ifdef DEBUG

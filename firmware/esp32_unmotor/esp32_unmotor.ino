@@ -117,14 +117,15 @@ static void speedControlPidTask(void *pvParameters) {
         // when receiving a new command
         if (reset_int) {
             if (codeTopic==USER_SYS_STAIRS_CLOSED_INT || codeTopic==USER_SYS_PROFILE_CLOSED_INT){
-                vTaskDelay(DELAY_STAIRS);
-            }
+                 vTaskDelay(DELAY_STAIRS);
+             }
             np = 0;
             encoderPot.setCount(0);
-            encoderMotor.clearCount();
+      
             reset_int = false;
             y_ant = 0;
             I = 0;
+            encoderMotor.clearCount();
             vTaskDelay(1000*h);
             continue;
         }
@@ -191,8 +192,8 @@ static void controlPidTask(void *pvParameters) {
         // at start we reset the integral action and the state variables
         // when receiving a new command
         if (reset_int) {
-            if (codeTopic==USER_SYS_STAIRS_CLOSED_INT || codeTopic==USER_SYS_PROFILE_CLOSED_INT){
-                vTaskDelay(DELAY_STAIRS);             
+             if (codeTopic==USER_SYS_STAIRS_CLOSED_INT || codeTopic==USER_SYS_PROFILE_CLOSED_INT){
+                 vTaskDelay(DELAY_STAIRS);             
             }
             I = 0;
             np = 0;
@@ -239,8 +240,7 @@ static void controlPidTask(void *pvParameters) {
         //The task is suspended while awaiting a new sampling time
         vTaskDelayUntil(&xLastWakeTime, taskPeriod);  
         np +=1;     
-        
-        
+                
     }
 }
 
@@ -379,11 +379,13 @@ static void speedGenControlTask(void *pvParameters) {
             if (codeTopic==USER_SYS_STAIRS_CLOSED_INT || codeTopic==USER_SYS_PROFILE_CLOSED_INT){
                 vTaskDelay(DELAY_STAIRS);
             }
-            encoderMotor.clearCount();
+            
             np = 0;
             encoderPot.clearCount();
             computeController(5, false);
-            reset_int = false;            
+            reset_int = false;          
+            encoderMotor.clearCount();
+            vTaskDelay(1000*h);            
             continue;
         }
         // reading the encoder
@@ -431,12 +433,9 @@ const TickType_t taskPeriod = (uint32_t) (1000 * h);
 
         if (reset_int){
             displayLed(0l , -1, 1, 0, 0);
-            voltsToMotor(abs(low_val)/low_val);
-            vTaskDelay(1000);
             float val = (low_val + high_val)/2;
-            voltsToMotor(val);
-            displayLed(val , low_val, high_val, 0.5, 0);
-            vTaskDelay(3000);
+            voltsToMotor(val);         
+            vTaskDelay(2000);
             reset_int = false;
             np = 0;
             encoderMotor.clearCount();
@@ -485,7 +484,7 @@ static void stepOpenTask(void *pvParameters) {
         if (reset_int){
             //this allow to set steady state for the low step
             voltsToMotor(0.5*abs(high_val)/high_val);
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(pdMS_TO_TICKS(1500));
             if (low_val != 0) {
                 voltsToMotor(low_val);
                 vTaskDelay(pdMS_TO_TICKS(1500));
