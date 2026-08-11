@@ -12,20 +12,26 @@ using JSON3
 using Interpolations
 using DelimitedFiles
 using ControlSystems
+using ControlSystemsBase
 using LinearAlgebra
-using MatrixEquations
-using Optim
 using Plots
 using Statistics
 using Printf
 using RobustAndOptimalControl
 using ControlSystemIdentification
+using LaTeXStrings
+using Base64
+using HypertextLiteral: @htl
+
+
+
+
 
 # ── Código fuente ────────────────────────────────────────────────────────────
 include("motorsys.jl")
 include("controlsys.jl")
 include("identsys.jl")
-include("identsys.jl")
+include("graphics.jl")
 
 # ── API pública ──────────────────────────────────────────────────────────────
 
@@ -44,6 +50,9 @@ export signal2hex, time2hex, matrix2hex, hexframe_to_array
 
 # Lectura de archivos
 export read_csv_file, read_csv_file3
+
+#figuras
+export redraw!, screen_pluto, entorno
 
 # Comandos de comunicación
 export send_command!, receive_frames!

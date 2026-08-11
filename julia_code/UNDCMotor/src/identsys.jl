@@ -6,11 +6,11 @@
 using Plots
 using ControlSystems
 using LinearAlgebra
-using Optim
 using Statistics
 using Printf
-using DSP
 using ControlSystemIdentification
+using LaTeXStrings
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  step_open  (respuesta escalón en lazo abierto – velocidad)
@@ -58,7 +58,6 @@ function step_open(sys::MotorSystem;
 
     connect!(sys)
     send_command!(sys, "step_open", payload)
-    sleep(2)
 
     on_frame = function(msg, frame_no)
         uf = hexframe_to_array(string(msg["u"]))
@@ -83,14 +82,16 @@ function step_open(sys::MotorSystem;
     end
 
     try
-        receive_frames!(sys, frames, on_frame; timeout_factor=2.0)
+        receive_frames!(sys, frames, on_frame; timeout_factor=10.0)
     catch e
         println("Error: ", e)
-    finally
-        disconnect!(sys)
-    end
 
-    _save_exp([tv, uv, yv], "DCmotor_step_open_exp.csv", "t,u,y")
+
+    end
+    set_reference(sys, 0.0)  # Volver a referencia cero al finalizar
+
+
+    save_experiment([tv, uv, yv], "DCmotor_step_open_exp.csv", "t,u,y")
     return tv, uv, yv
 end
 
@@ -173,11 +174,11 @@ function prbs_open(sys::MotorSystem;
         receive_frames!(sys, frames, on_frame; timeout_factor=20.0)
     catch e
         println("Error: ", e)
-    finally
-        disconnect!(sys)
-    end
 
-    _save_exp([tv, uv, yv], "DCmotor_prbs_open_exp.csv", "t,u,y")
+    end
+    set_reference(sys, 0.0)  # Volver a referencia cero al finalizar        
+
+    save_experiment([tv, uv, yv], "DCmotor_prbs_open_exp.csv", "t,u,y")
     return tv, uv, yv
 end
 
@@ -187,32 +188,88 @@ end
 # ═══════════════════════════════════════════════════════════════════════════════
 
 """Step open para curva estática. `sys` ya debe estar conectado."""
-function _step_open_static(sys::MotorSystem, u0::Real, u1::Real,
-                           t0::Real, t1::Real)
+
+function _step_open_static(sys::MotorSystem, u1::Real,  t1::Real, uee::Vector{Float64}, yee::Vector{Float64})
+  
+    
     h  = SAMPLING_TIME
     bs = BUFFER_SIZE
+    leg_size = 8
     pts_high = round(Int, t1 / h) + 1
-    pts_low  = round(Int, t0 / h)
-    total    = pts_low + pts_high
-    frames   = ceil(Int, total / bs)
+    frames   = ceil(Int, pts_high / bs)
 
     payload = Dict(
-        "low_val"     => float2hex(u0),
+        "low_val"     => float2hex(0.0),
         "high_val"    => float2hex(u1),
-        "points_low"  => long2hex(pts_low),
+        "points_low"  => long2hex(0),
         "points_high" => long2hex(pts_high),
     )
+
+    tv, uv, yv = Float64[], Float64[], Float64[]
+   
+   
+                 
+    plt = plot( layout=(1, 2), size=(900, 500),
+    title=["Experimento actual" "Curva estática – UNDCMotor"],
+    xlabel=["Tiempo (s)" "Voltaje (V)"],
+    ylabel=["Velocidad (°/s)" "Velocidad estacionaria (°/s)"], 
+    xlims=[(0, t1) (0,5)],
+    ylims=[(-30, 830) (-30, 830)],
+    background_color_subplot=[:mintcream :ivory ],
+    legend=[:bottomright :topleft], 
+    grid=true, gridalpha=0.2,
+    xticks=0:1:10, yticks=0:100:800,
+    margin=5Plots.mm)
+
+    # if !isempty(yee)
+    #     scatter!(plt,subplot=2, [u1], [yee[1]], color=:orange, marker=:circle,
+    #      legendfontsize = leg_size, fg_legend = "#d4aa00", markersize=3, linewidth=1)
+    # end
+
+
+    redraw!(plt)
+
+    connect!(sys)
     send_command!(sys, "step_open", payload)
 
-    uv, yv = Float64[], Float64[]
+    on_frame = function(msg, frame_no)
+       
+        uf = hexframe_to_array(string(msg["u"]))
+        yf = hexframe_to_array(string(msg["y"]))
+        tf = h .* (collect(0:length(yf)-1) .+ (frame_no - 1) * bs)
+        append!(tv, tf); append!(uv, uf); append!(yv, yf)
+        
+        pl_ee = scatter(uee, yee, color=:green, marker=:circle, label="",
+               markersize=3, linewidth=1)
+                 
 
-    on_frame = function(msg, _fn)
-        append!(uv, hexframe_to_array(string(msg["u"])))
-        append!(yv, hexframe_to_array(string(msg["y"])))
+        pl_ins = plot(tv, yv, color="#00aad4",
+                legendfontsize = leg_size, fg_legend= "#5fbcd3", linewidth=1.5)        
+          
+            
+        plt = plot(pl_ins, pl_ee, layout=(1, 2), size=(900, 500),
+        title=["Experimento actual" "Curva estática – UNDCMotor"],
+        xlabel=["Tiempo (s)" "Voltaje (V)"],
+        ylabel=["Velocidad (°/s)" "Velocidad estacionaria (°/s)"], 
+        xlims=[(0, t1) (0,5)],
+        ylims=[(-30, 830) (-30, 830)],
+        background_color_subplot=[:mintcream :ivory ],
+        legend=[:bottomright :topleft], 
+        grid=true, gridalpha=0.2,
+        xticks=0:1:10, yticks=0:100:800,
+        margin=5Plots.mm)
+        redraw!(plt)
+  
     end
 
-    receive_frames!(sys, frames, on_frame; timeout_factor=2.0)
-    return uv, yv
+    try
+        receive_frames!(sys, frames, on_frame; timeout_factor=10.0)
+    catch e
+        println("Error: ", e)
+    end
+    yss = Float64(mean(yv[end-49:end]))
+
+    return yss
 end
 
 
@@ -226,69 +283,90 @@ end
 Obtiene la curva estática velocidad vs voltaje del motor DC.
 Retorna (uee, yee) — vectores de voltaje y velocidad estacionaria.
 """
-function get_static_model(sys::MotorSystem; points::Int = 30)
-    dz_point = 0.3; delta_dz = 0.02; timestep = 3.0
-    u_pos = 10.0 .^ range(log10(dz_point - delta_dz), log10(5), length=points)
-    u_neg = -reverse(u_pos)
-    u_all = vcat(u_neg, u_pos)
+function get_static_model(sys::MotorSystem; points::Int = 20)
+    timestep = 3.0
+    dz_points = 5
+    u_dz = range(0.15, 0.25,  length=dz_points)
+    u_pos = range(0.3,5, length = points-dz_points)
+    u_all = vcat(u_dz  , u_pos )
+  
 
-    plt = plot(size=(900, 500),
-        title="Modelo estático UNDCMotor",
-        xlabel="Voltaje en motor (V)", ylabel="Velocidad estacionaria (°/s)",
-        xlims=(-5, 5), ylims=(-780, 780),
-        background_color=:ivory, grid=true, gridalpha=0.25,
-        legend=:topleft, margin=5Plots.mm)
-    display(plt)
 
-    uee = Float64[]
-    yee = Float64[]
+    uee = Vector{Float64}()
+    yee = Vector{Float64}()
 
     connect!(sys)
-    try
-        for ui in u_all
-            u_resp, y_resp = try
-                _step_open_static(sys, 0, ui, 0, timestep)
-            catch
-                sleep(4)
-                _step_open_static(sys, 0, ui, 0, timestep)
-            end
-            t = range(0.0, timestep, length(y_resp))
-            length(y_resp) < 50 && continue
-            yf = Float64(mean(y_resp[end-49:end]))
-            uf = Float64(ui)
+  
+    for ui in u_all
+        yss = _step_open_static(sys, ui, timestep, uee, yee)  
 
-            # Filtrar puntos en zona muerta
-            abs(yf) <= 10 && uf > 0.5 && continue
+        uss = Float64(ui)        
+        push!(uee, uss)
+        push!(yee, yss)
 
-            push!(uee, uf)
-            push!(yee, yf)
-
-            plt = plot(size=(900, 500),
-                title="Modelo estático UNDCMotor",
-                xlabel="Voltaje en motor (V)", ylabel="Velocidad estacionaria (°/s)",
-                xlims=(-5, 5), ylims=(-780, 780),
-                background_color=:ivory, grid=true, gridalpha=0.25,
-                legend=false, margin=5Plots.mm)
-            plot!(plt, uee, yee, color=:green, linewidth=1.5,
-                  marker=:circle, markersize=3, label="Curva estática")
-            plot!(plt, t, y_resp, color=:blue,alpha=0.15,  linewidth=1.5,
-                  label="Curva estática")
-            redraw!(plt)
-            sleep(0.3)
-        end
-    finally
-        disconnect!(sys)
     end
 
-    exp_data = hcat(uee, yee)
-    for path in (PATH_DATA, PATH_DEFAULT)
-        open(path * "DCmotor_static_gain_response.csv", "w") do io
+     # ── Regresión lineal: yee = K*uee + b 
+    
+    indices = findall(yee .> 2)
+    yee1 = yee[indices]
+    uee1 = uee[indices]
+    
+    A      = hcat(uee1, ones(length(uee1)))   # matriz de diseño [u 1]
+    coeffs = A \ yee1                        # mínimos cuadrados
+    K, b   = coeffs[1], coeffs[2]
+
+    u_fit  = range(minimum(uee), maximum(uee), length=100)
+    y_fit  = K .* u_fit .+ b
+
+    R²     = 1 - sum((yee1 .- (K .* uee1 .+ b)).^2) /
+                    sum((yee1 .- mean(yee1)).^2)
+
+    zm = uee1[1]
+
+     # Datos experimentales
+    datos = scatter(uee, yee,
+        label="Datos experimentales",
+         color=:green, marker=:circle, markersize=4, linewidth=1.5, opacity=0.7)
+
+    # Modelo lineal
+    leg_size = 10
+    mod_str = latexstring(@sprintf("\\omega_{ee} = %.2f\\,u -  \\,%0.2f\\, \\, (R^2 = %0.3f)", K, abs(b), R²))
+    plot!(datos, collect(u_fit), y_fit,
+        label = mod_str,
+        color="#0055d4", linewidth=1,  legendfontsize = leg_size,  linestyle=:dash)
+    
+    scatter!(datos,  [zm], [0],
+        label="Zona muerta: $(@sprintf("%.2f",zm)) V",
+        color=:red, marker=:square, markersize=4, linewidth=1.5)
+    
+    plt = plot(datos,  size=(600,600), 
+        title="Curva estática – UNDCMotor",
+        xlabel="Tensión  (V)",
+        ylabel="Velocidad estacionaria (°/s)",
+        xlims=(0, 5.1), ylims=(0, maximum(yee)+30),
+        background_color_subplot=:ivory,
+        xticks=0:1:5, yticks=0:100:800,
+        legend=:topleft, grid=true, gridalpha=0.2,  
+        margin=2Plots.mm)
+    display(plt)
+
+
+    exp_data = hcat(uee1, yee1)
+    open(PATH_DATA * "DCmotor_static_gain_response.csv", "w") do io
             println(io, "u,y")
             for i in axes(exp_data, 1)
                 @printf(io, "%.8f,%.8f\n", exp_data[i, 1], exp_data[i, 2])
             end
         end
+    open(PATH_DATA * "DCmotor_static_pars.csv", "w") do io
+            println(io, "K, b ,zm")
+            @printf(io, "%.8f,%.8f,%.8f\n", K, b, zm)
     end
+
+       
+    
+    set_reference(sys, 0.0)  # Volver a referencia cero al finalizar
     println("Modelo estático completado")
     return uee, yee
 end
@@ -305,46 +383,37 @@ Estima un modelo FOTD (First Order plus Time Delay) a partir de un escalón.
 Retorna (alpha, tau, L) — ganancia, constante de tiempo, retardo.
 """
 function get_fomodel_step(sys::MotorSystem;
-                          yop::Real = 400, usefile::Bool = false)
-    ymax = Float64(speed_from_volts(sys, 5))
-    ymin = Float64(speed_from_volts(sys, -5))
-    sigma = 50; timestep = 3
+                          yop::Real = 400, sigma::Real = 100, usefile::Bool = false)
 
-    # Selección del punto de operación
-    if -200 < yop < 0
-        ua = volts_from_speed(sys, -200)
-        ub = volts_from_speed(sys, -100); timestep = 5
-    elseif 0 <= yop < 200
-        ua = volts_from_speed(sys, 100)
-        ub = volts_from_speed(sys, 200); timestep = 5
-    elseif ymin <= yop <= ymin + sigma
-        ua = volts_from_speed(sys, -5)
-        ub = volts_from_speed(sys, yop + sigma)
+    ymax = speed_from_volts(sys, 5)
+    timestep = 3.0
+
+    
+    # Punto de operación → voltajes de excitación
+
+    if 0 <= yop < 2*sigma
+        ua = volts_from_speed(sys, 50)
+        ub = volts_from_speed(sys, 100)
+
     elseif ymax - sigma <= yop <= ymax
-        ua = volts_from_speed(sys, yop - sigma); ub = 5
-    elseif yop >= 200
+        ua = volts_from_speed(sys, yop - sigma);
+        ub = 5
+    elseif 2*sigma <= yop <  ymax - sigma
         ua = volts_from_speed(sys, yop - sigma)
         ub = volts_from_speed(sys, yop + sigma)
-    elseif yop <= -200
-        ua = volts_from_speed(sys, yop - sigma)
-        ub = volts_from_speed(sys, yop + sigma); timestep = 4
     else
         error("Velocidad fuera de rango [$(@sprintf("%.1f",ymin)), $(@sprintf("%.1f",ymax))]")
     end
 
     if !usefile
-        step_open(sys; u0=ua, u1=ub, t0=Float64(timestep), t1=Float64(timestep))
+        t, u, y = step_open(sys; u0=ua, u1=ub, t0=timestep, t1=timestep)
+    else
+        t, u, y = read_csv_file3(PATH_DATA * "DCmotor_step_open_exp.csv")
     end
 
-    t, u, y = read_csv_file3(PATH_DATA * "DCmotor_step_open_exp.csv")
-
     # Detectar el escalón
-    ind_step = argmax(diff(u))
+    ind_step = argmax(diff(u)) +1
 
-    responsetype = Lowpass(12)
-    designmethod = FIRWindow(hanning(32))
-    settle_filt    = digitalfilter(responsetype, designmethod; fs=50)
-    y = filtfilt(settle_filt, y)
 
     y = y[max(1, ind_step - 50):end]
     u = u[max(1, ind_step - 50):end]
@@ -362,7 +431,7 @@ function get_fomodel_step(sys::MotorSystem;
     y_norm = (y .- ya) ./ delta_y
 
     # LSQ para estimar tau y L
-    yi_pts = [0.1, 0.2, 0.3, 0.4]
+    yi_pts = [0.1, 0.15, 0.2, 0.3, 0.5]
     # Interpolación lineal para encontrar los tiempos correspondientes
     ti_pts = Float64[]
     for yp in yi_pts
@@ -375,22 +444,24 @@ function get_fomodel_step(sys::MotorSystem;
             push!(ti_pts, t[idx-1] + frac * (t[idx] - t[idx-1]))
         end
     end
-
+    print(ti_pts)
     # Sistema lineal: ti = L + tau * (-ln(1 - yi))
-    A_lsq = hcat(ones(4), [-log(1 - p) for p in yi_pts])
+    A_lsq = hcat(ones(length(yi_pts)), [-log(1 - p) for p in yi_pts])
     # Resolver con restricciones L >= 0, tau >= 0.1
     # Usando mínimos cuadrados simples
     x = A_lsq \ ti_pts
-    L_val = max(0.0, x[1])
-    tau = max(0.1, x[2])
+    
+    L_val = max(0.01, x[1])     
+    tau =  x[2]
     alpha = delta_y / delta_u
 
     # Modelo simulado
-    ymodel = [alpha * delta_u * (1 - exp(-max(0, ti - L_val) / tau)) + ya for ti in t]
+    tsim = range(t[1], t[end] , length=500)
+    ymodel = [alpha * delta_u * (1 - exp(-max(0, ti - L_val) / tau)) + ya for ti in tsim]
     
 
     # Gráfica
-    model_str = @sprintf("G(s) = %.3f/(%.3fs+1) * exp(%.2f)%%", alpha, tau, L_val)
+    model_str = @sprintf("G(s) = %.3f/(%.3fs+1) * exp(%.3f)%%", alpha, tau, L_val)
 
     plt = plot(layout=(2, 1), size=(900, 550),
         title=["Modelo FOTD estimado para UNDCMotor" ""],
@@ -401,20 +472,22 @@ function get_fomodel_step(sys::MotorSystem;
         legend=:bottomright, grid=true, gridalpha=0.15, margin=5Plots.mm)
     plot!(plt, subplot=1, t, y, label="Datos", color=:teal,
           linewidth=1.5, linestyle=:dot)
-    plot!(plt, subplot=1, t, ymodel, label=model_str, color=:deeppink,
+    plot!(plt, subplot=1, tsim, ymodel, label=model_str, color=:deeppink,
           linewidth=1.5)
     plot!(plt, subplot=2, t, u, label="Entrada", color=:green)
     display(plt)
 
-    for path in (PATH_DATA, PATH_DEFAULT)
-        open(path * "DCmotor_fomodel_step.csv", "w") do io
-            println(io, "alpha,tau,L")
-            @printf(io, "%.8f,%.8f,%.8f\n", alpha, tau, L_val)
-        end
-    end
+
     s = tf("s")
-    G = alpha /(tau*s+1) 
-    return G, L_val
+    b = alpha / tau
+    a = 1 / tau
+    G = b /(s+a) 
+
+    open(PATH_DATA * "DCmotor_fo_model.csv", "w") do io
+            println(io, "b,a,L")
+            @printf(io, "%.8f,%.8f,%.3f\n", b, a, L_val)
+    end    
+    return G
 end
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -428,27 +501,20 @@ Estima un modelo de primer orden usando datos de PRBS.
 Retorna la función de transferencia G₁(s).
 """
 function get_model_prbs(sys::MotorSystem;
-                         yop::Real = 400, usefile::Bool = false)
-    ymax = Float64(speed_from_volts(sys, 5))
-    ymin = Float64(speed_from_volts(sys, -5))
-    sigma = 50
+                         yop::Real = 400, sigma::Real = 100, usefile::Bool = false)
+    ymax = speed_from_volts(sys, 5)
+    
 
     # Punto de operación → voltajes de excitación
-    if -200 < yop < 0
-        ua = volts_from_speed(sys, -200)
-        ub = volts_from_speed(sys, -100)
-    elseif 0 <= yop < 200
-        ua = volts_from_speed(sys, 200)
+
+    if 0 <= yop < 2*sigma
+        ua = volts_from_speed(sys, 50)
         ub = volts_from_speed(sys, 100)
-    elseif ymin <= yop <= ymin + sigma
-        ua = volts_from_speed(sys, -5)
-        ub = volts_from_speed(sys, yop + sigma)
+
     elseif ymax - sigma <= yop <= ymax
-        ua = volts_from_speed(sys, yop - sigma); ub = 5
-    elseif 200 <= yop < ymax - sigma
-        ua = volts_from_speed(sys, yop + sigma)
-        ub = volts_from_speed(sys, yop - sigma)
-    elseif ymin + sigma < yop <= -200
+        ua = volts_from_speed(sys, yop - sigma);
+        ub = 5
+    elseif 2*sigma <= yop <  ymax - sigma
         ua = volts_from_speed(sys, yop - sigma)
         ub = volts_from_speed(sys, yop + sigma)
     else
@@ -461,31 +527,37 @@ function get_model_prbs(sys::MotorSystem;
 
     t, u, y = read_csv_file3(PATH_DATA * "DCmotor_prbs_open_exp.csv")
     ymean_val = Float64(mean(y))
-    um = u .- mean(u)
     
-    # filtering ym
+    # removing means
+    um = u .- mean(u) 
     ym = y .- ymean_val
-    responsetype = Lowpass(12)
-    designmethod = FIRWindow(hanning(32))
-    settle_filt    = digitalfilter(responsetype, designmethod; fs=50)
 
-    ym = filtfilt(settle_filt, ym)
-    um = filtfilt(settle_filt, um)
+
     # Formatear entrada como matriz (1 × N) para lsim
-    u_matrix = reshape(um, 1, :)
+  
 
-    na, nb = 1, 1 # number of parameters in denominator and numerator
+    na, nb = 1, 1 
     data = iddata(ym, um, SAMPLING_TIME)
-    Gh = arx(data, na, nb, estimator = wtls_estimator(data.y, na, nb)) 
+    data = prefilter(data,0, 12.5)  # Eliminar tendencia constante
+    Gh = arx(data, na, nb,inputdelay=1, estimator = wtls_estimator(ym, na, nb)) 
     G1 = d2c(Gh)
+
+    u_matrix = reshape(um, 1, :)
     res = lsim(G1, u_matrix, t)
-    ysim1 =  vec(res.y)
-    r1 = 100.0 * (1.0 - norm(ym .- ysim1) / norm(ym))
-    num, den  = numvec(G1), denvec(G1)
-    b = num[1][1] 
-    a = den[1][2]
+    ysim =  vec(res.y)
+    r1 = modelfit(ym, ysim)
+   
+
+
     # ── Gráfica comparativa ──────────────────────────────────────────
-    modelstr1 = @sprintf("G(s) = %.3f/(s + %.3f)  FIT=%.1f%%", b, a, r1)
+    
+    b = numvec(G1)[1][1];
+    a = denvec(G1)[1][2];
+
+
+    modelstr1 = latexstring(@sprintf("G(s) = \\frac{%.4f}{s + %.3f} \\quad (FIT=%.1f\\,\\%%)", b, a, r1))
+
+  
 
     xlims_v = (t[end] - 20, t[end])
     plt = plot(layout=(2, 1), size=(900, 550),
@@ -494,21 +566,24 @@ function get_model_prbs(sys::MotorSystem;
         xlabel=["Tiempo (s)" "Tiempo (s)"],
         xlims=[xlims_v xlims_v],
         background_color_subplot=[:ivory :mintcream],
-        legend=:bottomright, grid=true, gridalpha=0.15, margin=5Plots.mm)
+        legend=:bottomleft, grid=true, gridalpha=0.15, margin=5Plots.mm)
     plot!(plt, subplot=1, t, ym .+ ymean_val,
           label="Datos", color=:teal, linewidth=1.5, linestyle=:dot)
-    plot!(plt, subplot=1, t, ysim1 .+ ymean_val,
+    plot!(plt, subplot=1, t, ysim .+ ymean_val,
           label=modelstr1, color=:deeppink, linewidth=1.5)
     plot!(plt, subplot=2, t, u,
           label="PRBS", color=:green)
-    display(plt)
+    redraw!(plt)
+   
 
-    for path in (PATH_DATA, PATH_DEFAULT)
-        open(path * "DCmotor_fo_model_pbrs.csv", "w") do io
-            println(io, "b,a")
-            @printf(io, "%.8f,%.8f\n", b, a)
-        end
+  
+    open(PATH_DATA * "DCmotor_fo_model.csv", "w") do io
+            println(io, "b,a,L")
+            @printf(io, "%.8f,%.8f,%.3f\n", b, a, SAMPLING_TIME)
     end
 
     return G1
 end
+
+
+

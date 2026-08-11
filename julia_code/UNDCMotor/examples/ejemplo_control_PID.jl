@@ -11,7 +11,8 @@ sys = MotorSystem(port="/dev/ttyUSB0");
 s=tf("s")
 
 # identificacion del sistema
-G_ang = transfer_function(sys) 
+G_ang = get_model_prbs(sys; yop=200)
+
 #funcion del ángulo
 
 
@@ -39,27 +40,38 @@ n = 3
 
 # Iteraciones
 
-ωn = 9
-ζ = 0.7
+
 
 # Calculo de las constantes del PID Segundo orden
+ωn = 15
+ζ = 0.75
+n=2
 
 T  = n*ωn^3/((s+n*ωn)*(s^2 + 2*ζ0*ωn*s +ωn^2))
 Kd = ((2ζ + n) * ωn - a) / b
 Kp = (1 + 2n * ζ) * ωn^2 / b
 Ki = n * ωn^3 / b
+set_pid(sys;  kp=Kp, ki=Ki, kd=Kd, beta=0, N=5, output=:angle, deadzone=0.1)
+result = step_closed(sys; r0 = 0, r1 = 100,  t0 = 1, t1 =3);stepinfo_exp(result;T)
 
-# calculo de las constantes del PID con ITAE
+
+#%% calculo de las constantes del PID con ITAE
+
+ωn = 18
 T = (ωn^3)/(s^3 + 1.75*s^2*ωn + 2.15*s*ωn^2 + ωn^3)
 Kd = (1.78 * ωn - a) / b
 Kp = 2.15 * ωn^2 / b
 Ki = ωn^3/b
  
 
-set_pid(sys;  kp=Kp, ki=Ki, kd=Kd, beta=0, output=:angle, deadzone=0.2)
-
-result = step_closed(sys; r0 = 0, r1 = 100,  t0 = 1, t1 =3);stepinfo_exp(result;T)
-
+set_pid(sys;  kp=Kp, ki=Ki, kd=Kd, beta=0, N=10, output=:angle, deadzone=0.25)
+result = step_closed(sys; r0 = 0, r1 = 100,  t0 = 1, t1 =2);stepinfo_exp(result;T)
 
 
+using Printf
+
+numero = 3.141592653589793
+@printf("%.8g\n", Kp)
+@printf("%.8g\n", Ki)
+@printf("%.8g\n", Kd)
 

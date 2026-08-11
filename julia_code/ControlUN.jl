@@ -45,10 +45,10 @@ function dise2p(G, T, m,  PolosObs)
 
     # ─── Polinomio del observador ───────────────────────────────────────
 
-    Dpbar = real.(descvec(fromroots(Float64.(PolosObs))))
-
-    # ─── Numerador y denominador de la planta ───────────────────────────
-
+     vl = 1
+    m = n-1 + vl
+    Dpbar = descvec(fromroots([-80.0, -80.0]))
+    
     D = descvec(denpoly(G)[1, 1])
     N_raw = descvec(numpoly(G)[1, 1])
     n = length(D) - 1                          # orden de la planta
@@ -58,14 +58,14 @@ function dise2p(G, T, m,  PolosObs)
 
     # ─── P = minreal(T / N(s)) ──────────────────────────────────────────
 
-    P = minreal(T * tf([1.0], N_raw))
-    np = descvec(numpoly(P)[1, 1])
-    dp = descvec(denpoly(P)[1, 1])
+    H = minreal(T * tf([1.0], N_raw))
+    nh = descvec(numpoly(H)[1, 1])
+    dh = descvec(denpoly(H)[1, 1])
 
     # ─── Prefiltro L y lado derecho F ───────────────────────────────────
 
-    L = polyconv(np, Dpbar)
-    F = polyconv(dp, Dpbar)
+    L = polyconv(nh, Dpbar)
+    F = polyconv(dh, Dpbar)
 
     # ─── Matriz de Sylvester  (n+m+1) × (2m+2) ─────────────────────────
 
@@ -74,7 +74,7 @@ function dise2p(G, T, m,  PolosObs)
         Sm[k:k+n, k]       = D
         Sm[k:k+n, k+m+1]   = N
     end
-
+Sm
     # ─── Resolución del sistema lineal ──────────────────────────────────
 
     local A_vec::Vector{Float64}, M_vec::Vector{Float64}
@@ -83,7 +83,7 @@ function dise2p(G, T, m,  PolosObs)
         # Intenta diseñar controlador que rechaza perturbaciones
         Ind = setdiff(1:2m+2, m + 1)           # todas las columnas excepto m+1
         Sm_red = Sm[:, Ind]
-
+   
         if rank(Sm_red) >= n + m + 1
             x     = Sm_red \ F
             A_vec = [x[1:m]; 0.0]               # acción integral (cero en s=0)

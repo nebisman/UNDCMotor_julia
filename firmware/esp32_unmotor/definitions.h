@@ -132,7 +132,7 @@ const uint64_t pbrsSignal[32] = {
 
 /// Definitions for dead zone
 
-# define DEAD_ZONE 0
+# define DEAD_ZONE 0.2
 
 
 // Definitions for buttons
@@ -167,11 +167,11 @@ TaskHandle_t h_buttonTask;
 TaskHandle_t h_serialCommandTask;  // handle used by the UART ISR to wake the command task
 
 // PID control default parameters
-float kp = 0.14635290651760308;
-float ki = 0.7317645325880153;
-float kd  =0.014147246761060576;
+float kp = 0.21646846;
+float ki = 1.8122941;
+float kd  =0.0042447215;
 float N = 10;
-float beta = 0.7;
+float beta = 0;
 float h = SAMPLING_TIME; //sampling time
 float deadzone = DEAD_ZONE;
 const float br = 1/0.99;

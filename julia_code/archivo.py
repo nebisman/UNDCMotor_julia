@@ -1,0 +1,178 @@
+
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from scipy import signal
+ 
+# ──────────────────────────────────────────────
+# 1. Calcular el tiempo de subida exacto (10%→90%)
+# ──────────────────────────────────────────────
+def rise_time_exact(zeta, wn=1.0, t_final=50.0, n_points=100_000):
+    """Calcula tr (10%→90%) simulando la respuesta al escalón."""
+    num = [wn**2]
+    den = [1, 2*zeta*wn, wn**2]
+    sys = signal.TransferFunction(num, den)
+    t = np.linspace(0, t_final, n_points)
+    t, y = signal.step(sys, T=t)
+ 
+    # Valor final = 1 (ganancia DC = 1)
+    # Encontrar t donde y cruza 0.1 y 0.9
+    idx_10 = np.where(y >= 0.1)[0]
+    idx_90 = np.where(y >= 0.9)[0]
+ 
+    if len(idx_10) == 0 or len(idx_90) == 0:
+        return np.nan
+ 
+    # Interpolación lineal para mayor precisión
+    i10 = idx_10[0]
+    if i10 > 0:
+        t10 = t[i10-1] + (0.1 - y[i10-1]) / (y[i10] - y[i10-1]) * (t[i10] - t[i10-1])
+    else:
+        t10 = t[i10]
+ 
+    i90 = idx_90[0]
+    if i90 > 0:
+        t90 = t[i90-1] + (0.9 - y[i90-1]) / (y[i90] - y[i90-1]) * (t[i90] - t[i90-1])
+    else:
+        t90 = t[i90]
+ 
+    return t90 - t10
+ 
+ 
+# ──────────────────────────────────────────────
+# 2. Generar datos: zeta vs tr*wn  (con wn=1 → tr*wn = tr)
+# ──────────────────────────────────────────────
+zeta_fit = np.linspace(0.05, 0.95, 200)
+tr_exact = np.array([rise_time_exact(z, wn=1.0) for z in zeta_fit])
+ 
+# Producto normalizado (con wn=1, tr_norm = tr)
+tr_norm = tr_exact  # ya que wn=1
+ 
+# ──────────────────────────────────────────────
+# 3. Ajuste polinomial de segundo orden: tr*wn = a0 + a1*ζ + a2*ζ²
+# ──────────────────────────────────────────────
+mask = ~np.isnan(tr_norm)
+coeffs = np.polyfit(zeta_fit[mask], tr_norm[mask], 2)
+a2, a1, a0 = coeffs
+poly_approx = np.polyval(coeffs, zeta_fit)
+ 
+print("=" * 60)
+print("APROXIMACIÓN POLINOMIAL DE 2do ORDEN PARA EL TIEMPO DE SUBIDA")
+print("=" * 60)
+print(f"\n  tr·ωn ≈ {a0:.6f} + {a1:.6f}·ζ + {a2:.6f}·ζ²\n")
+print(f"  Coeficientes:")
+print(f"    a0 = {a0:.6f}")
+print(f"    a1 = {a1:.6f}")
+print(f"    a2 = {a2:.6f}")
+ 
+# ──────────────────────────────────────────────
+# 4. Verificación: error del ajuste
+# ──────────────────────────────────────────────
+error = tr_norm[mask] - poly_approx[mask]
+error_pct = 100 * error / tr_norm[mask]
+print(f"\n  Error absoluto máximo:   {np.max(np.abs(error)):.6f}")
+print(f"  Error porcentual máximo: {np.max(np.abs(error_pct)):.2f} %")
+print(f"  Error porcentual medio:  {np.mean(np.abs(error_pct)):.2f} %")
+print(f"  RMSE:                    {np.sqrt(np.mean(error**2)):.6f}")
+ 
+# ──────────────────────────────────────────────
+# 5. Verificación cruzada con distintos wn
+# ──────────────────────────────────────────────
+print("\n" + "-" * 60)
+print("VERIFICACIÓN CRUZADA (distintos ωn y ζ)")
+print("-" * 60)
+print(f"{'ζ':>6} {'ωn':>6} {'tr exacto':>12} {'tr aprox':>12} {'Error %':>10}")
+print("-" * 60)
+ 
+test_cases = [
+    (0.1, 1.0), (0.3, 2.0), (0.5, 1.0), (0.5, 5.0),
+    (0.7, 1.0), (0.7, 3.0), (0.9, 1.0), (0.9, 10.0)
+]
+for zeta_t, wn_t in test_cases:
+    tr_real = rise_time_exact(zeta_t, wn=wn_t)
+    tr_est = np.polyval(coeffs, zeta_t) / wn_t   # tr = (tr·wn) / wn
+    err = 100 * abs(tr_real - tr_est) / tr_real
+    print(f"{zeta_t:6.2f} {wn_t:6.1f} {tr_real:12.6f} {tr_est:12.6f} {err:9.2f} %")
+ 
+# ──────────────────────────────────────────────
+# 6. Gráficas
+# ──────────────────────────────────────────────
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+fig.suptitle(
+    r'Aproximación polinomial de 2° orden para $t_r \cdot \omega_n$'
+    '\n'
+    r'$H(s) = \omega_n^2 / (s^2 + 2\zeta\omega_n s + \omega_n^2)$',
+    fontsize=14, fontweight='bold'
+)
+ 
+# --- (a) Comparación directa ---
+ax = axes[0, 0]
+ax.plot(zeta_fit, tr_norm, 'b-', linewidth=2.5, label='Exacto (simulación)')
+ax.plot(zeta_fit, poly_approx, 'r--', linewidth=2, label='Polinomio 2° orden')
+ax.set_xlabel(r'$\zeta$', fontsize=12)
+ax.set_ylabel(r'$t_r \cdot \omega_n$', fontsize=12)
+ax.set_title('(a) Comparación: exacto vs aproximación', fontsize=11)
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax.set_xlim([0, 1])
+ 
+# --- (b) Error porcentual ---
+ax = axes[0, 1]
+ax.plot(zeta_fit[mask], error_pct, 'g-', linewidth=2)
+ax.axhline(y=0, color='k', linewidth=0.5, linestyle='-')
+ax.set_xlabel(r'$\zeta$', fontsize=12)
+ax.set_ylabel('Error [%]', fontsize=12)
+ax.set_title('(b) Error porcentual de la aproximación', fontsize=11)
+ax.grid(True, alpha=0.3)
+ax.set_xlim([0, 1])
+ 
+# --- (c) Respuestas al escalón para varios zeta ---
+ax = axes[1, 0]
+zetas_demo = [0.1, 0.3, 0.5, 0.7, 0.9]
+colors_demo = plt.cm.viridis(np.linspace(0.1, 0.9, len(zetas_demo)))
+wn_demo = 1.0
+t_demo = np.linspace(0, 25, 5000)
+ 
+for z, c in zip(zetas_demo, colors_demo):
+    sys_demo = signal.TransferFunction([wn_demo**2], [1, 2*z*wn_demo, wn_demo**2])
+    t_out, y_out = signal.step(sys_demo, T=t_demo)
+    tr_val = rise_time_exact(z, wn=wn_demo)
+    ax.plot(t_out, y_out, color=c, linewidth=1.8, label=rf'$\zeta={z}$, $t_r={tr_val:.2f}$')
+ 
+ax.axhline(y=0.1, color='gray', linestyle=':', linewidth=1, alpha=0.7)
+ax.axhline(y=0.9, color='gray', linestyle=':', linewidth=1, alpha=0.7)
+ax.text(24.5, 0.1, '10%', va='center', ha='right', fontsize=9, color='gray')
+ax.text(24.5, 0.9, '90%', va='center', ha='right', fontsize=9, color='gray')
+ax.set_xlabel(r'$t \cdot \omega_n$', fontsize=12)
+ax.set_ylabel('y(t)', fontsize=12)
+ax.set_title(r'(c) Respuestas al escalón ($\omega_n=1$)', fontsize=11)
+ax.legend(fontsize=8, loc='right')
+ax.grid(True, alpha=0.3)
+ax.set_xlim([0, 25])
+ 
+# --- (d) Comparación de fórmulas conocidas ---
+ax = axes[1, 1]
+zeta_dense = np.linspace(0.05, 0.95, 300)
+tr_dense = np.array([rise_time_exact(z) for z in zeta_dense])
+ 
+# Fórmulas clásicas de aproximación
+approx_linear = 1.0 + 1.1*zeta_dense + 1.4*zeta_dense**2   # Ogata-like
+approx_poly2 = np.polyval(coeffs, zeta_dense)
+ 
+ax.plot(zeta_dense, tr_dense, 'b-', linewidth=2.5, label='Exacto')
+ax.plot(zeta_dense, approx_poly2, 'r--', linewidth=2,
+        label=rf'Ajuste: ${a0:.3f} + {a1:.3f}\zeta + {a2:.3f}\zeta^2$')
+ax.plot(zeta_dense, approx_linear, 'k:', linewidth=1.5,
+        label=r'Referencia: $1.0 + 1.1\zeta + 1.4\zeta^2$')
+ 
+ax.set_xlabel(r'$\zeta$', fontsize=12)
+ax.set_ylabel(r'$t_r \cdot \omega_n$', fontsize=12)
+ax.set_title('(d) Comparación con fórmula de referencia', fontsize=11)
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+ax.set_xlim([0, 1])
+ 
+plt.tight_layout(rect=[0, 0, 1, 0.93])
+plt.savefig('/mnt/user-data/outputs/rise_time_approximation.png', dpi=180, bbox_inches='tight')
+print("\n✓ Gráfica guardada en: rise_time_approximation.png")

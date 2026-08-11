@@ -34,8 +34,13 @@ deps = [
     "CSV",              # Lectura avanzada de CSV
     "DataFrames",       # DataFrames para análisis   
     "RobustAndOptimalControl", # Funciones avanzadas de control robusto y óptimo
-    "DSP",               #  para procesamiento dwe señales 
-    "ControlSystemIdentification"   # para identificacion de sistemas
+    "ControlSystemIdentification",   # para identificacion de sistemas
+    "LaTeXStrings",
+    "Polynomials",
+    "InvertedIndices",
+    "Base64",
+    "HypertextLiteral",
+    "AbstractPlutoDingetjes",
 ]
 
 println("\n→ Instalando $(length(deps)) dependencias...")
@@ -53,7 +58,7 @@ println("\n→ Resolviendo versiones...")
 Pkg.resolve()
 
 println("\n→ Precompilando...")
-Pkg.precompile()
+Pkg.precompile(; strict=true)
 
 println("\n" * "═" ^ 60)
 println("  ✓ Instalación completada.")

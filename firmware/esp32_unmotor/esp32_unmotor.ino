@@ -26,13 +26,13 @@ void computeReference() {
             break;
         case USER_SYS_STEP_CLOSED_INT:
             if (np < points_low) {
-                reference = low_val  + encoderPot.getCount() *  3.75;
+                reference = low_val ;
                 // sending the indication for publishing
                 xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
                 displayLed(y, low_val, high_val, 0.5, 0);
             }
             else if (np <= total_time) {
-                reference = high_val + encoderPot.getCount() *  3.75;
+                reference = high_val ;
                 // sending the indication for publishing
                 xTaskNotify(h_publishStateTask, 0b0001, eSetBits);
                 displayLed(y, low_val, high_val, 0.5, 0);
@@ -483,12 +483,17 @@ static void stepOpenTask(void *pvParameters) {
         TickType_t xLastWakeTime = xTaskGetTickCount();
         if (reset_int){
             //this allow to set steady state for the low step
-            voltsToMotor(0.5*abs(high_val)/high_val);
-            vTaskDelay(pdMS_TO_TICKS(1500));
-            if (low_val != 0) {
+            //voltsToMotor(1.0);
+            //vTaskDelay(pdMS_TO_TICKS(1000));      
+
+            if (low_val !=0){
                 voltsToMotor(low_val);
-                vTaskDelay(pdMS_TO_TICKS(1500));
-            }
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }  else{
+                voltsToMotor(1.5*high_val/abs(high_val));
+                vTaskDelay(pdMS_TO_TICKS(1000));
+
+            }            
             reset_int = false;
             np = 0;     
             encoderMotor.clearCount();      

@@ -96,16 +96,21 @@ function read_csv_file3(filepath::String)
     return Float64.(data[:, 1]), Float64.(data[:, 2]), Float64.(data[:, 3])
 end
 
+function read_model(filepath::String)
+    data = readdlm(filepath, ','; header=true)[1]
+    return data[:, 1], data[:, 2], data[:, 3]
+end
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Estructura principal:  MotorSystem
 # ═══════════════════════════════════════════════════════════════════════════════
 
 """
-    MotorSystem(;  port, bauds)
+   MotorSystem(;  port, bauds)
 
 Interfaz serial con el sistema UNDCMotor (ESP32).
-Equivalente a la clase MotorSystem de Python.
+
 """
 mutable struct MotorSystem   
     port         :: String
@@ -274,7 +279,7 @@ Bloquea hasta recibir `total_frames` tramas. Invoca `on_frame(msg, frame_no)`
 por cada trama recibida. Lanza `TimeoutError` si no llegan datos.
 """
 function receive_frames!(sys::MotorSystem, total_frames::Int, on_frame::Function;
-                         timeout_factor::Float64 = 20.0)
+                         timeout_factor::Float64 = 10.0)
     timeout = timeout_factor * BUFFER_SIZE * SAMPLING_TIME
     curr_frame = -1
     sync = false
@@ -315,22 +320,26 @@ end
 # ── Modelos de la planta ─────────────────────────────────────────────────────
 
 """
-    transfer_function(sys; output=:position, min_order=true)
+    transfer_function(sys; output=:angle, min_order=true)
 
 Retorna la función de transferencia nominal del motor DC.
 `output` puede ser `:position` o `:speed`.
 """
 function transfer_function(sys::MotorSystem,
                            output::Symbol = :angle)
+    
+    b, a , L = read_model(PATH_DATA * "DCmotor_fo_model.csv")
+    b, a  = b[1], a[1] 
+
     if output == :angle   # angle   
-            num = [3479.0413]
-            den = [1.0000, 2.4825, 0]
+            num = [b]
+            den = [1.0000,  a, 0]
  
             
 
-    else # :speed at 360
-            num = [2300.5004]
-            den = [1.0, 3.3203]
+    else # :speed 
+            num = [b]
+            den = [1.0000, a]
        
     end
     return ControlSystems.tf(num, den)
@@ -342,9 +351,17 @@ end
 Interpola la velocidad estacionaria a partir de la curva estática.
 """
 function speed_from_volts(sys::MotorSystem, volts::Real)
-    u, y = read_csv_file()
-    itp = linear_interpolation(u, y; extrapolation_bc=Line())
-    return itp(Float64(volts))
+    K, b, zm = read_csv_file3(PATH_DATA * "DCmotor_static_pars.csv")
+    K, b, zm = K[1], b[1], zm[1]
+    if abs(volts) <= zm
+        return 0.0
+    end
+    
+    if zm < abs(volts) <= 5.0
+        return K * volts + sign(volts)*b
+    end
+    error("volts debe estar en [0, 5]")  
+
 end
 
 """
@@ -353,16 +370,18 @@ end
 Interpola el voltaje necesario para una velocidad estacionaria dada.
 """
 function volts_from_speed(sys::MotorSystem, speed::Real)
-    u, y = read_csv_file()
-    speed == 0 && return 0.0
-    # Interpolación inversa: u(y)
-    # Necesitamos que y sea monótona → separar ramas si es necesario
-    # Para este motor, y es monótonamente creciente con u
-    itp = linear_interpolation(y, u; extrapolation_bc=Line())
-    if y[1] <= speed <= y[end]
-        return itp(Float64(speed))
+    u, y = read_csv_file(PATH_DATA * "DCmotor_static_gain_response.csv")
+    K, b, zm = read_model(PATH_DATA * "DCmotor_static_pars.csv")
+    K, b, zm = K[1], b[1], zm[1]
+    
+    if abs(speed) <= 2 
+        return sign(speed)*zm
     end
-    error("speed debe estar en [$(round(y[1],digits=1)), $(round(y[end],digits=1))]")
+
+    if 2 < abs(speed) <= y[end]
+        return (speed - sign(speed)*b)/K
+    end
+    error("speed debe estar entre [0 y $(round(y[end],digits=1))]")
 end
 
 
@@ -381,3 +400,13 @@ function save_experiment(columns::Vector, filename::String, header::String)
     end
     return nothing
 end
+
+
+
+
+
+
+
+
+
+

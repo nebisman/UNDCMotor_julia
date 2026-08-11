@@ -3,43 +3,16 @@
 #  LB 2026 – MIT License
 # ═══════════════════════════════════════════════════════════════════════════════
 
-using Plots
 using ControlSystems
 using LinearAlgebra
-using MatrixEquations
+using Plots
 using Printf
+using Statistics
 using RobustAndOptimalControl
+using LaTeXStrings
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Utilidades de plotting en tiempo real
-# ═══════════════════════════════════════════════════════════════════════════════
 
-"""
-    setup_fig(nrows; figsize=(900,500))
-
-Crea una figura con `nrows` subplots verticales usando Plots.jl.
-Retorna el objeto plot y un vector de índices de subplot.
-En Plots.jl, actualizamos los datos directamente y usamos `display()`.
-"""
-function setup_fig(nrows::Int; figsize=(900, 500))
-    # Se usan layouts de Plots.jl
-    plt = plot(layout=(nrows, 1), size=figsize, legend=:bottomright,
-               background_color=:white, margin=5Plots.mm)
-    display(plt)
-    return plt
-end
-
-"""Redibuja la figura para actualización en tiempo real."""
-function redraw!(plt)
-    display(plt)
-    return nothing
-end
-
-"""Guarda las columnas como CSV (delegado a save_experiment de motorsys)."""
-function _save_exp(columns, filename, header)
-    save_experiment(columns, filename, header)
-end
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -54,9 +27,7 @@ Fija la referencia del sistema a `ref_value`.
 function set_reference(sys::MotorSystem, ref_value::Real = 50.0)
     connect!(sys)
     send_command!(sys, "set_ref", Dict("reference" => float2hex(ref_value)))
-    sleep(0.1)
-    disconnect!(sys)   
-    sleep(0.1)
+    disconnect!(sys)      
     println("Referencia fijada a $(@sprintf("%.2f", ref_value)) \n")
     return nothing
 end
@@ -91,10 +62,7 @@ function set_pid(sys::MotorSystem;
     )
     connect!(sys)
     send_command!(sys, "set_pid", payload)
-    sleep(0.1)
-    set_reference(sys, 0);    
-    disconnect!(sys)
-    sleep(0.25)
+    set_reference(sys, 0);  
     println("PID actualizado: kp=$kp  ki=$ki  kd=$kd  N=$N  β=$beta")
     return nothing
 end
@@ -166,10 +134,7 @@ function set_controller(sys::MotorSystem, controller;
     )
     connect!(sys)
     send_command!(sys, "set_gencon", payload)
-    sleep(0.1)
     set_reference(sys, 0);   
-    disconnect!(sys)   
-    sleep(0.1) 
     println("Controlador cargado en Motor")
     return nothing
 end
@@ -220,7 +185,7 @@ function step_closed(sys::MotorSystem;
     display(plt)
 
     # Comunicación
-    connect!(sys)
+    connect!(sys) 
     send_command!(sys, "step_closed", payload)
 
     on_frame = function(msg, frame_no)
@@ -232,33 +197,36 @@ function step_closed(sys::MotorSystem;
 
         # Reconstruir gráfica desde cero para evitar trazas duplicadas
         plt = plot(layout=(2, 1), size=(900, 500),
-            title=["Step cerrado  r0=$(@sprintf("%.1f",r0)) → r1=$(@sprintf("%.1f",r1))" ""],
-            ylabel=["Grados (o °/s)" "Volts"],
-            xlabel=["Tiempo (s)" "Tiempo (s)"],
-            xlims=[(0, t0 + t1 - h) (0, t0 + t1 - h)],
-            ylims=[(min(r0, r1) - 0.6delta, max(r0, r1) + 0.6delta) (-5, 5)],
-            background_color_subplot=[:ivory :mintcream],
-            legend=[:bottomright :bottomleft],
-            grid=true, gridalpha=0.15, margin=5Plots.mm)
-        plot!(plt, subplot=1, tv, rv, label="r(t)", color=:teal,
+             title=["Step cerrado  r0=$(@sprintf("%.1f",r0)) → r1=$(@sprintf("%.1f",r1))" ""],
+             ylabel=["Grados (o °/s)" "Volts"],
+             xlabel=["Tiempo (s)" "Tiempo (s)"],
+             xlims=[(0, t0 + t1 - h) (0, t0 + t1 - h)],
+             ylims=[(min(r0, r1) - 0.6delta, max(r0, r1) + 0.6delta) (-5, 5)],
+             background_color_subplot=[:ivory :mintcream],
+             legend=[:bottomright :bottomleft],
+             grid=true, gridalpha=0.15, margin=5Plots.mm)
+
+        
+        plot!(plt, subplot=1, tv, rv, label="", color=:teal,
               linewidth=1.25, seriestype=:steppost)
-        plot!(plt, subplot=1, tv, yv, label="y(t)", color=:deeppink,
+        plot!(plt, subplot=1, tv, yv, label="", color=:deeppink,
               linewidth=1.0)
-        plot!(plt, subplot=2, tv, uv, label="u(t)", color=:royalblue,
+        plot!(plt, subplot=2, tv, uv, label="", color=:royalblue,
               linewidth=1.0)
+
         redraw!(plt)
+  
     end
 
     try
-        receive_frames!(sys, frames, on_frame; timeout_factor=2.0)
+        receive_frames!(sys, frames, on_frame; timeout_factor=10.0)
     catch e
-        println("Error: ", e)
-    finally
-        disconnect!(sys)
-    end
+        println("Error: ", e)    
 
-    _save_exp([tv, rv, yv, uv], "DCmotor_step_closed_exp.csv", "t,r,y,u")
+    end
     set_reference(sys, 0.0)  # Volver a referencia cero al finalizar
+
+    save_experiment([tv, rv, yv, uv], "DCmotor_step_closed_exp.csv", "t,r,y,u")
     return tv, rv, yv, uv
 end
 
@@ -337,12 +305,8 @@ function stairs_closed(sys::MotorSystem;
         receive_frames!(sys, frames, on_frame;  timeout_factor=20.0)
     catch e
         println("Error: ", e)
-    finally
-        disconnect!(sys)
     end
     set_reference(sys, 0.0)  # Volver a referencia cero al finalizar
-
-
     _save_exp([tv, rv, yv, uv], "DCmotor_stairs_closed_exp.csv", "t,r,y,u")
     return tv, rv, yv, uv
 end
@@ -427,13 +391,9 @@ function profile_closed(sys::MotorSystem;
         receive_frames!(sys, frames, on_frame)
     catch e
         println("Error: ", e)
-    finally
-        disconnect!(sys)
     end
     
-    set_reference(sys, 0.0)  # Volver a referencia cero al finalizar
-
-    
+    set_reference(sys, 0.0)  # Volver a referencia cero al finalizar    
     _save_exp([tv, rv, yv, uv], "DCmotor_profile_closed_exp.csv", "t,r,y,u")
     return tv, rv, yv, uv
 end
@@ -449,7 +409,7 @@ Estructura con los resultados de stepinfo para datos experimentales reales.
 """
 struct StepInfoSR
     y0::Float64
-    yf::Float64
+    yf::Float64    
     stepsize::Float64
     peak::Float64
     peaktime::Float64        # relativo al instante del escalón
@@ -496,8 +456,17 @@ function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1,
 
     # ── Detectar instante del escalón en u ────────────────────────────
     step_idx = argmax(abs.(diff(r1))) 
-    t_step   = t1[step_idx]
-    #t = t.-t_step
+    
+
+    if step_idx != 1
+        step_idx +=1
+        stepsize = r1[end] - r1[1]
+    else 
+       stepsize = r1[end] 
+    end
+
+    t_step   = t1[step_idx] 
+
     # ── Valores de estado estacionario ────────────────────────────────
     #  y0: promedio de hasta 50 puntos ANTES del escalón
     #  yf: promedio de los últimos 50 puntos
@@ -508,42 +477,36 @@ function stepinfo_exp(res; T = nothing,  settling_th = 0.02, risetime_th = (0.1,
 
     # ── Dirección y magnitud (desde u) ────────────────────────────────
     
-    rf = r1[end]
-    r0 = r1[1]
-    stepsize  = abs(rf- r0)
-
-
-
+   
 
     # ── Subpico (undershoot) — solo post-escalón ──────────────────────
     lowerpeak, _ =  findmin(y1) 
     undershoot   = max(100.0 * (y0 - lowerpeak) / stepsize, 0.0)
 
-    # ── Tiempo de estabilización ──────────────────────────────────────
-    #  Butterworth causal orden 4, fc=1 Hz sobre y_post reflejada.
-    #  El filtro ve primero el estado estacionario; el primer índice
-    #  donde la salida se sale de la banda marca el settling time.
     
-    responsetype = Lowpass(15)
-    designmethod = FIRWindow(hanning(8))
+
     
+    
+    data = iddata(y1, u1, SAMPLING_TIME)
+    data = prefilter(data, 0, 12.5)
    
-    settle_filt    = digitalfilter(responsetype, designmethod; fs=fs)
-    y_filtered =  filtfilt(settle_filt, y1)
+    y_filtered = data.y
+    y_filtered = y_filtered[step_idx: end]
     
-    y = y_filtered[step_idx: end]
-    y[1] = y0 # corregir posible distorsión inicial del filtro
+    
+    y = y_filtered #[step_idx: end]
     t = t1[step_idx: end] .- t_step
     r = r1[step_idx: end]
 
     band           = settling_th * stepsize
-    idx_rev        = findfirst(abs.(reverse(y) .- yf) .> band)
-    t_rev    = reverse(t)
+    y_rev = reverse(y_filtered)
+    idx_rev        = findfirst(abs.(y_rev[10:end] .- yf) .> band)
+    t_rev    = reverse(t)[10:end]
      
     if idx_rev === nothing
         settlingtime = NaN
     else
-        settlingtime = t_rev[idx_rev] 
+        settlingtime = ( t_rev[idx_rev] + t_rev[idx_rev-1] ) / 2 
     end
 
 
@@ -594,22 +557,24 @@ end
 # ── Gráfica con anotaciones ──────────────────────────────────────────
 function _plot_stepinfo(t, r, y, t10, t90, i10, i90,  si, T)    
     
-
+    leg_size =10
     p =    plot( t, r;
-        label = "r(t)", lw = 1.5, color = :green, 
-        alpha=0.7, background_color=:mintcream, seriestype=:steppre)
-    # plot!( [0,0],[si.y0, si.y0 + si.stepsize];
-    #     label = "r(t)", lw = 1.5, color = :green, alpha=0.7, background_color=:mintcream)
+        label = "r(t)", legendfontsize = leg_size, lw = 1.5, color = :green, 
+        alpha=0.7, background_color=:mintcream, seriestype=:steppre,  margin=5Plots.mm)
+    plot!( [0, 0], [r[end]-si.stepsize, r[end]];
+        label = "", lw = 1.5, color = :green, 
+        alpha=0.7, background_color=:mintcream)
+
 
         
 
     if  T !== nothing
-        t1 = 0: 1/1000: t[end]
-        escalon(x, x0) = x >= x0 ? r[end] : r[1]
-        r1 = escalon.(t1, 0)      
-        res = lsim(T, r1', t1)
-        plot!(p, res,  color = "#00aad4", alpha=0.5, seriestype=:steppost,
-        label = "y(t) simulada")   
+        ref0 = si.stepsize
+        tsim = 0: 1/500: t[end]
+        res = step(T*ref0, tsim)
+        plot!(p, res.t, res.y'.+ (r[end]-si.stepsize), label="y(t)  (simulada)", 
+        legendfontsize = leg_size, color = "#00aad4", alpha=0.75)
+    
     end      
     plot!(t, y;
         label  = "y(t) medida (yf = $(@sprintf("%.2f",si.yf)))",
@@ -649,11 +614,10 @@ function _plot_stepinfo(t, r, y, t10, t90, i10, i90,  si, T)
     # Leyenda informativa
     plot!(p, Float64[], Float64[];
         label = "Tr = $(@sprintf("%.2f",si.risetime)) s", lw = 1,
-        ls = :dashdot, color = :purple, alpha = 0.6)
-        
+        ls = :dashdot, color = :purple, alpha = 0.6)    
              
 
-    display(p)
+    redraw!(p)
 end
 
 # ── Mostrar resumen en consola ────────────────────────────────────────
@@ -668,7 +632,6 @@ function Base.show(io::IO, si::StepInfoSR)
     @printf(io, "  %-18s %8.3f s\n", "T. estabilización:",    si.settlingtime)
     @printf(io, "  %-18s %8.3f s\n", "T. subida:",        si.risetime)
     @printf(io, "  %-18s %8.3f V\n", "Max. |u(t)|:",        si.u_max)
-
 end
 
 

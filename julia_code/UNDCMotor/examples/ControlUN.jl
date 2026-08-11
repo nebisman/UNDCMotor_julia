@@ -1,13 +1,11 @@
 using ControlSystems
 using LinearAlgebra
 using Polynomials
-using Alert
 using InvertedIndices
 using Plots; gr(linewidth = 2, grid=:true)
 using Printf
 Base.show(io::IO, f::Float64) = @printf(io, "%.4f", f)
-using Symbolics, Latexify
-
+using Symbolics
 
 """
     dise2p(G, T, m, PolosObs)
@@ -25,7 +23,7 @@ Calcula un controlador de dos parámetros.
 
 La señal de control es:  u = (L/A)·r − (M/A)·y
 """
-function dise2p(G, T, m,  PolosObs)
+function dise2p(G, T, m, polosobs)
 
     # ─── Funciones auxiliares ───────────────────────────────────────────
 
@@ -42,30 +40,45 @@ function dise2p(G, T, m,  PolosObs)
     function descvec(p)
         return Float64.(reverse(coeffs(p)))
     end
-
-    # ─── Polinomio del observador ───────────────────────────────────────
-
-    Dpbar = real.(descvec(fromroots(Float64.(PolosObs))))
-
-    # ─── Numerador y denominador de la planta ───────────────────────────
-
+    
+    npol = length(polosobs)
+    if npol == 0
+        Dhbar = [1]
+    else
+        Dhbar = descvec(fromroots(polosobs))
+    end
+    
     D = descvec(denpoly(G)[1, 1])
     N_raw = descvec(numpoly(G)[1, 1])
-    n = length(D) - 1                          # orden de la planta
+    n = length(D) - 1  
+    
+    # ─── H = minreal(T / N(s)) ──────────────────────────────────────────
+
+    H = minreal(T * tf([1.0], N_raw))
+    nh = descvec(numpoly(H)[1, 1])
+    dh = descvec(denpoly(H)[1, 1])
+    
+    grad_DH = length(dh) - 1   
+
+    gr_Dpbar = n + m - grad_DH 
+    
+    if npol != gr_Dpbar
+        error("DH_bar debe tener $gr_Dpbar polos")
+    end
+
+
+    
+ 
 
     # Rellenar N con ceros a la izquierda (como hace tfdata de MATLAB)
     N = [zeros(length(D) - length(N_raw)); N_raw]
 
-    # ─── P = minreal(T / N(s)) ──────────────────────────────────────────
 
-    P = minreal(T * tf([1.0], N_raw))
-    np = descvec(numpoly(P)[1, 1])
-    dp = descvec(denpoly(P)[1, 1])
 
     # ─── Prefiltro L y lado derecho F ───────────────────────────────────
 
-    L = polyconv(np, Dpbar)
-    F = polyconv(dp, Dpbar)
+    L = polyconv(nh, Dhbar)
+    F = polyconv(dh, Dhbar)
 
     # ─── Matriz de Sylvester  (n+m+1) × (2m+2) ─────────────────────────
 
@@ -83,7 +96,7 @@ function dise2p(G, T, m,  PolosObs)
         # Intenta diseñar controlador que rechaza perturbaciones
         Ind = setdiff(1:2m+2, m + 1)           # todas las columnas excepto m+1
         Sm_red = Sm[:, Ind]
-
+   
         if rank(Sm_red) >= n + m + 1
             x     = Sm_red \ F
             A_vec = [x[1:m]; 0.0]               # acción integral (cero en s=0)
@@ -108,6 +121,67 @@ function dise2p(G, T, m,  PolosObs)
      return C2P
     
 end
+
+
+
+
+"""
+    asigne_polos(P, pol)
+
+Calcula un controlador 1-DOF de realimentación unitaria que asigna los
+polos de lazo cerrado al vector `pol`.
+Retorna `(K, T, Gur, S, ind_error)`.
+"""
+function asigne_polos(P, pol)
+    P1     = tf(P)
+    N, D   = _tfdata(P1)
+    n      = length(D) - 1
+    l      = length(D) - length(N)
+    nMm    = length(pol)
+    m      = nMm - n
+    DT_p   = fromroots(pol)
+    Na     = zeros(length(D))
+    Na[l+1:end] = N
+    DT     = reverse(DT_p.coeffs)
+
+    Sm = zeros(n + m + 1, 2*(m+1))
+    for k in 1:m+1
+        Sm[k:k+n, k]     = D
+        Sm[k:k+n, k+m+1] = Na
+    end
+
+    ind_error = 0
+    local Y::Vector{Float64}, X::Vector{Float64}
+
+    if m > n - 1
+        Ind  = setdiff(1:2m+2, m+1)
+        Smj  = Sm[:, Ind]
+        if rank(Smj) >= n + m + 1
+            XY = Smj \ DT
+            Y  = [XY[1:m]; 0.0]
+            X  = XY[m+1:end]
+        else
+            XY = Sm \ DT
+            Y  = XY[1:m+1]
+            X  = XY[m+2:end]
+        end
+    elseif m == n - 1
+        XY = Sm \ DT
+        Y  = XY[1:m+1]
+        X  = XY[m+2:2m+2]
+    else
+        ind_error = 1
+        @warn "asigne_polos: Número de polos insuficiente"
+        return nothing, nothing, nothing, nothing, ind_error
+    end
+
+    K   = tf(X, Y)
+    T   = feedback(K * P)
+    Gur = minreal(T / P)
+    S   = minreal(1 - T)
+    return K, T, Gur, S, ind_error
+end
+
 
 
 
